@@ -1,0 +1,95 @@
+name: Build OmniChromium E72 v5.0
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 8
+        uses: actions/setup-java@v4
+        with:
+          java-version: '8'
+          distribution: 'temurin'
+
+      - name: Download CLDC 1.1, MIDP 2.0 & ProGuard
+        run: |
+          mkdir -p libs build stub/javax/microedition/io/file
+          wget -q https://repo1.maven.org/maven2/org/microemu/cldcapi11/2.0.4/cldcapi11-2.0.4.jar -O libs/cldc11.jar
+          wget -q https://repo1.maven.org/maven2/org/microemu/midpapi20/2.0.4/midpapi20-2.0.4.jar -O libs/midp20.jar
+          wget -q https://repo1.maven.org/maven2/net/sf/proguard/proguard-base/6.2.2/proguard-base-6.2.2.jar -O libs/proguard.jar
+
+      - name: Generate JSR-75 FileConnection Stub
+        run: |
+          cat << 'EOF' > stub/javax/microedition/io/file/FileConnection.java
+          package javax.microedition.io.file;
+          import java.io.IOException;
+          import java.io.InputStream;
+          import java.io.OutputStream;
+          import java.util.Enumeration;
+          import javax.microedition.io.StreamConnection;
+          public interface FileConnection extends StreamConnection {
+              boolean exists();
+              void mkdir() throws IOException;
+              void create() throws IOException;
+              Enumeration list() throws IOException;
+              OutputStream openOutputStream() throws IOException;
+              InputStream openInputStream() throws IOException;
+              void close() throws IOException;
+          }
+          EOF
+          javac -source 1.3 -target 1.1 -bootclasspath "libs/cldc11.jar:libs/midp20.jar" stub/javax/microedition/io/file/FileConnection.java
+
+      - name: Generate Chromium Blue App Icon (icon.png)
+        run: |
+          python3 -c '
+          import struct, zlib
+          def make_png(w, h):
+              raw = b""
+              for y in range(h):
+                  raw += b"\x00"
+                  for x in range(w):
+                      dx, dy = x - w//2, y - h//2
+                      dist = dx*dx + dy*dy
+                      if dist < 100:
+                          raw += b"\x1A\x73\xE8\xFF"
+                      elif dist < 380:
+                          raw += b"\xFB\xBC\x05\xFF"
+                      else:
+                          raw += b"\xEA\x43\x35\xFF"
+              def chunk(tag, data):
+                  return struct.pack("!I", len(data)) + tag + data + struct.pack("!I", zlib.crc32(tag + data) & 0xffffffff)
+              return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack("!IIBBBBB", w, h, 8, 6, 0, 0, 0)) + chunk(b"IDAT", zlib.compress(raw)) + chunk(b"IEND", b"")
+          open("build/icon.png", "wb").write(make_png(48, 48))
+          '
+
+      - name: Compile OmniBrowserE72.java (v5.0 Chromium Edition)
+        run: |
+          javac -encoding UTF-8 -source 1.3 -target 1.1 \
+            -bootclasspath "libs/cldc11.jar:libs/midp20.jar:stub" \
+            -d build OmniBrowserE72.java
+          jar cfm raw.jar MANIFEST.MF -C build .
+
+      - name: Preverify Bytecode for Symbian S60v3
+        run: |
+          java -jar libs/proguard.jar \
+            -injars raw.jar \
+            -outjars OmniBrowserE72.jar \
+            -libraryjars "libs/cldc11.jar:libs/midp20.jar:stub" \
+            -microedition \
+            -dontshrink \
+            -dontoptimize \
+            -dontobfuscate \
+            -keep "class *"
+
+      - name: Upload OmniChromium E72 v5.0 JAR
+        uses: actions/upload-artifact@v4
+        with:
+          name: OmniChromium-E72-v5
+          path: OmniBrowserE72.jar
