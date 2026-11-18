@@ -1,0 +1,12 @@
+Manifest-Version: 1.0
+MIDlet-Name: OmniChromium E72 Pro
+MIDlet-Version: 5.0.0
+MIDlet-Vendor: OmniLabs-Chromium
+MIDlet-1: OmniChromium E72, /icon.png, OmniBrowserE72
+MIDlet-Icon: /icon.png
+MicroEdition-Configuration: CLDC-1.1
+MicroEdition-Profile: MIDP-2.0
+MIDlet-Permissions-Opt: javax.microedition.io.Connector.http, javax.microedition.io.Connector.https, javax.microedition.io.Connector.file.read, javax.microedition.io.Connector.file.write
+Nokia-MIDlet-Original-Display-Size: 320,240
+Nokia-MIDlet-Target-Display-Size: 320,240
+
